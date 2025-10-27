@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import Swal from 'sweetalert2'
 import Resultados from '../resultados/resultados.jsx'
+import { unifiedSearch } from '../../services/unifiedSearchService'
 
 const Topic = () => {
   const [searchTerm, setSearchTerm] = useState('')
@@ -10,14 +11,16 @@ const Topic = () => {
   const [currentStep, setCurrentStep] = useState(0)
   const [showResults, setShowResults] = useState(false)
   const [searchData, setSearchData] = useState(null)
+  const [searchResults, setSearchResults] = useState([])
 
   const searchSteps = [
-    'Extrayendo los mejores datos...',
-    'Analizando papers científicos...',
-    'Procesando información relevante...',
-    'Filtrando por criterios de calidad...',
-    'Generando resultados...',
-    'Finalizando búsqueda...'
+    '📚 Definiendo el área temática...',
+    '🔍 Identificando variables y keywords...',
+    '🌐 Buscando en bases de datos académicas (ArXiv)...',
+    '📊 Recolectando artículos científicos...',
+    '✔️ Filtrando artículos relevantes...',
+    '📑 Consolidando resultados seleccionados...',
+    '✅ Construyendo el Estado del Arte...'
   ]
 
   useEffect(() => {
@@ -79,30 +82,88 @@ const Topic = () => {
     setIsSearching(true)
     setCurrentStep(0)
 
-    // Simular progreso de búsqueda
-    for (let i = 0; i < searchSteps.length; i++) {
-      setCurrentStep(i)
-      await new Promise(resolve => setTimeout(resolve, 1500)) // 1.5 segundos por paso
-    }
+    try {
+      // Calcular tiempo total para mostrar progreso (mínimo 30 segundos)
+      const totalSteps = searchSteps.length;
+      const minTotalTime = 30000; // 30 segundos en ms
+      const timePerStep = Math.ceil(minTotalTime / totalSteps);
+      
+      let progressInterval;
+      let currentStepIndex = 0;
+      
+      progressInterval = setInterval(() => {
+        if (currentStepIndex < totalSteps - 1) {
+          currentStepIndex++;
+          setCurrentStep(currentStepIndex);
+        } else {
+          clearInterval(progressInterval);
+        }
+      }, timePerStep);
 
-    // Simular tiempo adicional de procesamiento
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    setIsSearching(false)
-    setCurrentStep(0)
-    
-    // Guardar datos de búsqueda y mostrar resultados
-    setSearchData({
-      searchTerm,
-      startYear,
-      endYear
-    })
-    setShowResults(true)
+      // Búsqueda real en múltiples fuentes académicas
+      console.log('🔍 Buscando en múltiples fuentes académicas...');
+      
+      // Hacer la búsqueda
+      const searchResponse = await unifiedSearch({
+        searchQuery: searchTerm,
+        startYear,
+        endYear,
+        maxResults: 15 // 5 por fuente * 3 fuentes
+      });
+      
+      // Si la búsqueda terminó muy rápido, esperar hasta completar el mínimo de tiempo
+      // para que el usuario vea el progreso completo
+      await new Promise(resolve => setTimeout(resolve, 10000));
+
+      // Los resultados ya vienen filtrados de unifiedSearch
+      const filteredResults = searchResponse.results;
+
+      clearInterval(progressInterval);
+      setIsSearching(false);
+      setCurrentStep(searchSteps.length - 1);
+
+      if (filteredResults.length === 0) {
+        await Swal.fire({
+          icon: 'info',
+          title: 'Sin resultados',
+          text: `No se encontraron papers para "${searchTerm}" en el rango ${startYear}-${endYear}. Intenta ampliar el rango de búsqueda.`,
+          confirmButtonColor: '#4f46e5'
+        });
+        return;
+      }
+
+      // Guardar datos de búsqueda y resultados
+      setSearchData({
+        searchTerm,
+        startYear,
+        endYear,
+        totalFound: searchResponse.totalResults,
+        filteredCount: filteredResults.length,
+        sources: searchResponse.sources || ['Múltiples fuentes']
+      });
+      setSearchResults(filteredResults);
+      setShowResults(true);
+
+      console.log(`✅ Encontrados ${filteredResults.length} papers únicos de ${searchResponse.sources?.join(', ') || 'múltiples fuentes'}`);
+    } catch (error) {
+      console.error('Error en búsqueda:', error);
+      clearInterval(progressInterval);
+      setIsSearching(false);
+      setCurrentStep(0);
+      
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error en la búsqueda',
+        text: error.message || 'Ocurrió un error al buscar en ArXiv. Intenta nuevamente.',
+        confirmButtonColor: '#dc2626'
+      });
+    }
   }
 
   const handleBackToSearch = () => {
     setShowResults(false)
     setSearchData(null)
+    setSearchResults([])
     setSearchTerm('')
     setStartYear('')
     setEndYear('')
@@ -128,6 +189,7 @@ const Topic = () => {
     return (
       <Resultados 
         searchData={searchData}
+        results={searchResults}
         onBackToSearch={handleBackToSearch}
         onExportPDF={handleExportPDF}
         onSendWhatsApp={handleSendWhatsApp}
@@ -197,7 +259,12 @@ const Topic = () => {
                 color: 'white',
                 fontSize: '1.5rem',
                 marginBottom: '16px',
-                fontWeight: '600'
+                fontWeight: '600',
+                minHeight: '3rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center'
               }}
             >
               {searchSteps[currentStep]}
