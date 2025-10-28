@@ -27,9 +27,14 @@ export const searchOpenAlex = async (params) => {
     
     // Agregar filtro de rango de años si se especifica
     if (startYear && endYear) {
-      // OpenAlex requiere el año, no el rango completo
-      const yearFilter = `${startYear}`;
-      searchParams.filter = `publication_year:${yearFilter}`;
+      // Si ambos años son iguales, usar un solo año
+      if (parseInt(startYear) === parseInt(endYear)) {
+        searchParams.filter = `publication_year:${startYear}`;
+      } else {
+        // OpenAlex no soporta rangos directamente, así que usamos solo el rango básico
+        // y filtraremos después en el código
+        searchParams.filter = `publication_year:>=${startYear},publication_year:<=${endYear}`;
+      }
     }
     
     const response = await axios.get(OPENALEX_API, {

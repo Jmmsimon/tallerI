@@ -21,7 +21,7 @@ function detectDomain(searchQuery) {
 }
 
 export const unifiedSearch = async (params) => {
-  const { searchQuery, startYear, endYear, maxResults = 50 } = params;
+  const { searchQuery, startYear, endYear, maxResults = 20 } = params;
   
   console.log('🔍 Iniciando búsqueda unificada en múltiples fuentes...');
   
@@ -37,50 +37,114 @@ export const unifiedSearch = async (params) => {
   
   console.log(`🔍 Buscando en ${sourcesToUse} fuentes académicas (${resultsPerSource} papers por fuente)...`);
   
+  // Crear un array de años si se especifica un rango
+  let yearsToSearch = null;
+  if (startYear && endYear) {
+    const start = parseInt(startYear);
+    const end = parseInt(endYear);
+    yearsToSearch = [];
+    for (let year = start; year <= end; year++) {
+      yearsToSearch.push(year);
+    }
+    console.log(`📅 Buscando en los años: ${yearsToSearch.join(', ')}`);
+  }
+  
   // Realizar búsquedas en paralelo según dominio
   const searchPromises = [];
   
-  // SIEMPRE buscar en Semantic Scholar y OpenAlex (buenas para todo)
-  searchPromises.push(
-    searchSemanticScholar({ 
-      searchQuery, 
-      limit: resultsPerSource 
-    }).then(result => {
-      console.log(`✅ Semantic Scholar: ${result.results.length} papers`);
-      return { ...result, source: 'Semantic Scholar' };
-    }).catch(err => {
-      console.error('❌ Error en Semantic Scholar:', err.message);
-      return { success: false, results: [], source: 'Semantic Scholar', totalResults: 0 };
-    }),
-    
-    searchOpenAlex({ 
-      searchQuery, 
-      limit: resultsPerSource,
-      startYear,
-      endYear
-    }).then(result => {
-      console.log(`✅ OpenAlex: ${result.results.length} papers`);
-      return { ...result, source: 'OpenAlex' };
-    }).catch(err => {
-      console.error('❌ Error en OpenAlex:', err.message);
-      return { success: false, results: [], source: 'OpenAlex', totalResults: 0 };
-    })
-  );
-  
-  // Solo usar ArXiv si NO es medicina (ArXiv no es bueno para medicina)
-  if (domain !== 'medical') {
+  // Si hay años especificados, buscar en cada año
+  if (yearsToSearch && yearsToSearch.length > 0) {
+    // Buscar en todos los años del rango
+    for (const year of yearsToSearch) {
+      // Semantic Scholar
+      searchPromises.push(
+        searchSemanticScholar({ 
+          searchQuery, 
+          limit: resultsPerSource,
+          year: year
+        }).then(result => {
+          console.log(`✅ Semantic Scholar ${year}: ${result.results.length} papers`);
+          return { ...result, source: 'Semantic Scholar' };
+        }).catch(err => {
+          console.error(`❌ Error en Semantic Scholar ${year}:`, err.message);
+          return { success: false, results: [], source: 'Semantic Scholar', totalResults: 0 };
+        }),
+        
+        searchOpenAlex({ 
+          searchQuery, 
+          limit: resultsPerSource,
+          startYear: year,
+          endYear: year
+        }).then(result => {
+          console.log(`✅ OpenAlex ${year}: ${result.results.length} papers`);
+          return { ...result, source: 'OpenAlex' };
+        }).catch(err => {
+          console.error(`❌ Error en OpenAlex ${year}:`, err.message);
+          return { success: false, results: [], source: 'OpenAlex', totalResults: 0 };
+        })
+      );
+      
+      // ArXiv solo si no es medicina
+      if (domain !== 'medical') {
+        searchPromises.push(
+          searchArxiv({ 
+            searchQuery, 
+            maxResults: resultsPerSource 
+          }).then(result => {
+            // Filtrar resultados por año
+            result.results = result.results.filter(p => p.year === year);
+            console.log(`✅ ArXiv ${year}: ${result.results.length} papers`);
+            return { ...result, source: 'ArXiv' };
+          }).catch(err => {
+            console.error(`❌ Error en ArXiv ${year}:`, err.message);
+            return { success: false, results: [], source: 'ArXiv', totalResults: 0 };
+          })
+        );
+      }
+    }
+  } else {
+    // Si no hay años especificados, buscar normalmente
     searchPromises.push(
-      searchArxiv({ 
+      searchSemanticScholar({ 
         searchQuery, 
-        maxResults: resultsPerSource 
+        limit: resultsPerSource 
       }).then(result => {
-        console.log(`✅ ArXiv: ${result.results.length} papers`);
-        return { ...result, source: 'ArXiv' };
+        console.log(`✅ Semantic Scholar: ${result.results.length} papers`);
+        return { ...result, source: 'Semantic Scholar' };
       }).catch(err => {
-        console.error('❌ Error en ArXiv:', err.message);
-        return { success: false, results: [], source: 'ArXiv', totalResults: 0 };
+        console.error('❌ Error en Semantic Scholar:', err.message);
+        return { success: false, results: [], source: 'Semantic Scholar', totalResults: 0 };
+      }),
+      
+      searchOpenAlex({ 
+        searchQuery, 
+        limit: resultsPerSource,
+        startYear,
+        endYear
+      }).then(result => {
+        console.log(`✅ OpenAlex: ${result.results.length} papers`);
+        return { ...result, source: 'OpenAlex' };
+      }).catch(err => {
+        console.error('❌ Error en OpenAlex:', err.message);
+        return { success: false, results: [], source: 'OpenAlex', totalResults: 0 };
       })
     );
+    
+    // Solo usar ArXiv si NO es medicina (ArXiv no es bueno para medicina)
+    if (domain !== 'medical') {
+      searchPromises.push(
+        searchArxiv({ 
+          searchQuery, 
+          maxResults: resultsPerSource 
+        }).then(result => {
+          console.log(`✅ ArXiv: ${result.results.length} papers`);
+          return { ...result, source: 'ArXiv' };
+        }).catch(err => {
+          console.error('❌ Error en ArXiv:', err.message);
+          return { success: false, results: [], source: 'ArXiv', totalResults: 0 };
+        })
+      );
+    }
   }
   
   // Esperar a que todas las búsquedas terminen
@@ -89,12 +153,10 @@ export const unifiedSearch = async (params) => {
   // Consolidar resultados
   const allPapers = [];
   const sources = [];
-  let totalFound = 0;
   
   results.forEach((result, index) => {
     if (result.success && result.results) {
       sources.push(result.source || `Fuente ${index + 1}`);
-      totalFound += result.totalResults || result.results.length;
       allPapers.push(...result.results);
     }
   });
@@ -153,21 +215,21 @@ export const unifiedSearch = async (params) => {
     return b.year - a.year;
   });
   
-  // FILTRAR POR AÑO si se especificó el rango
-  let filteredByYear = papersToShow;
-  if (startYear && endYear) {
-    const start = parseInt(startYear);
-    const end = parseInt(endYear);
-    filteredByYear = papersToShow.filter(paper => paper.year >= start && paper.year <= end);
-    console.log(`📅 Filtrado por año (${start}-${end}): ${filteredByYear.length} papers`);
+  // Ya se buscó en todos los años del rango, solo aplicar límite
+  let finalResults = papersToShow;
+  
+  // Aplicar límite de resultados
+  if (maxResults && maxResults > 0) {
+    finalResults = papersToShow.slice(0, parseInt(maxResults));
+    console.log(`🎯 Limitando resultados a ${maxResults}: de ${papersToShow.length} a ${finalResults.length} papers`);
   }
   
-  console.log(`✅ Búsqueda completa: ${filteredByYear.length} papers únicos filtrados de ${sources.join(', ')}`);
+  console.log(`✅ Búsqueda completa: ${finalResults.length} papers únicos de ${sources.join(', ')}`);
   
   return {
     success: true,
-    totalResults: filteredByYear.length,
-    results: filteredByYear,
+    totalResults: finalResults.length,
+    results: finalResults,
     sources: sources,
     query: searchQuery
   };
