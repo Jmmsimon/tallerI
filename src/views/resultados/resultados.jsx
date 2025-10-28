@@ -567,7 +567,18 @@ const Resultados = ({ searchData, results = [], onBackToSearch, onExportPDF, onS
                         fontSize: '0.9rem'
                       }}
                     >
-                      {paper.authors}
+                      <div
+                        className="autores-columna"
+                        style={{
+                          maxHeight: '6em', // aprox. 4 líneas
+                          overflowY: 'auto',
+                          whiteSpace: 'normal',
+                          color: '#6b7280',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        {paper.authors}
+                      </div>
                     </td>
                     <td 
                       style={{
