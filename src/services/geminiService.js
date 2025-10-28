@@ -1,14 +1,10 @@
-/**
- * Servicio para generar keywords automáticamente a partir de preguntas PICO
- * Utiliza Gemini AI si está configurado, sino genera keywords inteligentes
- */
+
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 // Usar el modelo más reciente de Gemini
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 /**
- * Genera keywords automáticamente a partir de PICO (sin IA externa)
  * @param {Object} picoData - Datos del formulario PICO
  * @returns {Object} Keywords generados
  */
@@ -157,10 +153,11 @@ Responde SOLO con un JSON válido con este formato:
   "explanation": "Breve explicación de por qué estas keywords"
 }`;
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${API_KEY}`, {
+    const response = await fetch(GEMINI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-goog-api-key': API_KEY
       },
       body: JSON.stringify({
         contents: [{
