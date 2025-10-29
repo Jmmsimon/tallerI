@@ -79,21 +79,41 @@ function generateKeywordsWithoutAI(picoData) {
     return translateMap[lowerK] || k;
   }).filter(k => k && k.length > 2);
   
-  // Si no hay suficientes keywords, agregar términos relacionados
-  if (translatedKeywords.length < 5) {
-    // Detectar tipo de investigación
-    const hasDeepLearning = intervencion?.toLowerCase().includes('deep') || intervencion?.toLowerCase().includes('aprendizaje');
-    const hasCNN = intervencion?.toLowerCase().includes('cnn') || intervencion?.toLowerCase().includes('redes');
-    const hasRadiology = poblacion?.toLowerCase().includes('pulmón') || poblacion?.toLowerCase().includes('radiolog');
-    
-    if (hasDeepLearning || hasCNN) {
-      translatedKeywords.push('machine learning', 'artificial intelligence', 'computer vision');
+  // Detectar contexto específico de la búsqueda
+  const lowerPoblacion = poblacion?.toLowerCase() || '';
+  const lowerIntervencion = intervencion?.toLowerCase() || '';
+  const lowerComparacion = comparacion?.toLowerCase() || '';
+  
+  // Detectar temas específicos
+  const hasLungCancer = lowerPoblacion.includes('pulmón') || lowerPoblacion.includes('lung');
+  const hasBreastCancer = lowerPoblacion.includes('mama') || lowerPoblacion.includes('breast');
+  const hasDeepLearning = lowerIntervencion.includes('deep') || lowerIntervencion.includes('aprendizaje') || lowerComparacion.includes('deep');
+  const hasCNN = lowerIntervencion.includes('cnn') || lowerIntervencion.includes('redes') || lowerComparacion.includes('cnn');
+  
+  // Agregar términos MUY específicos según el tema
+  if (hasLungCancer) {
+    translatedKeywords.push('lung cancer', 'pulmonary');
+    // NO agregar "medical imaging" genérico - es demasiado amplio y trae resultados irrelevantes
+    if (lowerPoblacion.includes('radiólo') || lowerIntervencion.includes('radiólo')) {
+      // Solo agregar radiología SI es específico del cáncer de pulmón
+      translatedKeywords.push('chest imaging', 'lung nodules');
     }
-    if (hasRadiology) {
-      translatedKeywords.push('medical imaging', 'radiology');
-    }
-    
-    translatedKeywords.push(...medicalTerms);
+  } else if (hasBreastCancer) {
+    translatedKeywords.push('breast cancer', 'mammography');
+  }
+  
+  // Solo agregar términos de IA si están específicamente mencionados
+  if (hasDeepLearning && hasCNN) {
+    translatedKeywords.push('deep learning', 'convolutional neural networks');
+  } else if (hasDeepLearning) {
+    translatedKeywords.push('deep learning');
+  } else if (hasCNN) {
+    translatedKeywords.push('cnn', 'convolutional neural networks');
+  }
+  
+  // Si aún hay pocas keywords (< 3), agregar términos médicos muy específicos
+  if (translatedKeywords.length < 3) {
+    translatedKeywords.push(...medicalTerms.slice(0, 2)); // Solo 2 términos médicos genéricos
   }
   
   // Limitar a 8-10 keywords
